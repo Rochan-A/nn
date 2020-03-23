@@ -101,19 +101,19 @@ def train_network(dataset,
 	"""
 	loss_history = []
 	for i in range(EPOCH):
-		for k in range(0, len(tr_idx), BATCH_SIZE):
-			end = min(k+BATCH_SIZE, len(tr_idx))
-			output = nn.forward(dataset[k:end, :INPUT])
-			nn.backwards(dataset[k:end, :INPUT], \
+		for k in range(0, len(train_idx), batch_size):
+			end = min(k+batch_size, len(train_idx))
+			output = model.forward(dataset[k:end, :INPUT])
+			model.backwards(dataset[k:end, :INPUT], \
 					dataset[k:end, INPUT])
 
 		loss = 0
-		np.random.shuffle(tr_idx)
+		np.random.shuffle(train_idx)
 
 		for _, val in enumerate(test_idx):
-			output = nn.eval(dataset[val, :INPUT])
+			output = model.eval(dataset[val, :INPUT])
 			loss += np.square(dataset[val, INPUT] - output)*0.5
-		loss /= len(tr_idx)
+		loss /= len(train_idx)
 		loss_history.append(loss[0])
 
 		print("Epoch: ", i," Validation Loss: ", loss[0])
@@ -131,7 +131,7 @@ def scores(data, model, test_idx, input_size):
 		input_size: Input dimension
 	"""
 	norm_data = copy.deepcopy(data)
-	norm_data, rng, mins, maxs = scale_linear_bycolumn(norm_data)
+	norm_data, rng, _, maxs = scale_linear_bycolumn(norm_data)
 
 	val_out = np.zeros((len(test_idx), 1), dtype=np.float32)
 
@@ -178,10 +178,10 @@ if __name__ == '__main__':
 				batch_size=BATCH_SIZE)
 
 	# Generate test and train indices arrays
-	tr_idx, test_idx = split(dataset)
+	train_idx, test_idx = split(dataset)
 
 	# Train
-	loss_history = train_network(dataset, tr_idx, test_idx, nn, \
+	loss_history = train_network(dataset, train_idx, test_idx, nn, \
 				INPUT, epoch=EPOCH, batch_size=BATCH_SIZE)
 
 	# Compute MAPE and RSQ value
