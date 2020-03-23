@@ -57,7 +57,7 @@ class ff_network():
 
 		rad = 1 / np.sqrt(self.hiddenSize + bias_node)
 		X = truncated_normal(mean=0, sd=1, low=-rad, upp=rad)
-		self.w2 = X.rvs((self.hiddenSize + bias_node,
+		self.w2 = X.rvs((self.hiddenSize,
 			self.hiddenSize + bias_node))
 
 		rad = 1 / np.sqrt(self.hiddenSize + bias_node)
@@ -68,7 +68,7 @@ class ff_network():
 		# Auxilary matrices for storing momentum calculation
 		self.w1_delta = np.zeros((self.hiddenSize,
 			self.inputSize + bias_node))
-		self.w2_delta = np.zeros((self.hiddenSize + bias_node,
+		self.w2_delta = np.zeros((self.hiddenSize,
 			self.hiddenSize + bias_node))
 		self.w3_delta = np.zeros((self.outputSize,
 			self.hiddenSize + bias_node))
@@ -90,8 +90,7 @@ class ff_network():
 		x = np.array(x, ndmin=2).T
 
 		# Forward pass first layer
-		self.l1 = np.dot(self.w1, x)
-		self.o1 = tanh(self.l1)
+		self.o1 = tanh(np.dot(self.w1, x))
 
 		# If bias is present, concatenate vector of 1's
 		if self.bias:
@@ -99,12 +98,15 @@ class ff_network():
 					np.ones((1, self.o1.shape[1]))),axis=0)
 
 		# Forward pass second layer
-		self.l2 = np.dot(self.w2, self.o1)
-		self.o2 = tanh(self.l2)
+		self.o2 = tanh(np.dot(self.w2, self.o1))
+
+		# If bias is present, concatenate vector of 1's
+		if self.bias:
+			self.o2 = np.concatenate((self.o2, \
+					np.ones((1, self.o2.shape[1]))),axis=0)
 
 		# Forward pass third layer
-		self.l3 = np.dot(self.w3, self.o2)
-		self.o3 = tanh(self.l3)
+		self.o3 = tanh(np.dot(self.w3, self.o2))
 		return self.o3
 
 	def backwards(self, inp, expected):
@@ -120,10 +122,9 @@ class ff_network():
 					np.ones((inp.shape[0],1))), axis=1)
 
 		inp = np.array(inp, ndmin=2).T
-		expected = np.array(expected, ndmin=2).T
 
 		# Compute error at last layer
-		self.o_error = expected.transpose(1, 0) - self.o3
+		self.o_error = expected - self.o3
 
 		# Note: Refer backpropogation slides for full details on
 		#       backprop equation.
@@ -150,17 +151,24 @@ class ff_network():
 
 		# Backprop for weight matrix 2
 		self.l2_error = np.dot(self.w3.T, self.o_error)*d_tanh(self.o2)
-		delta_w2 = self.lr*np.dot(self.l2_error, self.o1.T)
+		x = np.dot(self.l2_error, self.o1.T)
+		if self.bias:
+			# If bias is present, last row cut off
+			x = x[:-1, :]
+		delta_w2 = self.lr*x
 		self.w2 += delta_w2 + self.momentum * self.w2_delta
 		self.w2_delta = delta_w2
 
 		# Backprop for weight matrix 1
-		self.l1_error = np.dot(self.w2.T,self.l2_error)*d_tanh(self.o1)
-		# If bias is present, concatenate vector of 1's
 		if self.bias:
-			x = np.dot(self.l1_error, inp.T)[:-1,:]
+			# If bias is present, last row cut off for errors
+			l1_error = np.dot(self.w2.T,self.l2_error[:-1,:])
+			l1_error *= d_tanh(self.o1)
+			x = np.dot(l1_error[:-1, :], inp.T)
 		else:
-			x = np.dot(self.l1_error, inp.T)
+			l1_error = np.dot(self.w2.T,self.l2_error)
+			l1_error *= d_tanh(self.o1)
+			x = np.dot(l1_error, inp.T)
 		delta_w1 = self.lr*x
 		self.w1 += delta_w1 + self.momentum * self.w1_delta
 		self.w1_delta = delta_w1
@@ -181,17 +189,19 @@ class ff_network():
 
 		x = np.array(x, ndmin=2).T
 
-		l1 = np.dot(self.w1, x)
-		o1 = tanh(l1)
+		o1 = tanh(np.dot(self.w1, x))
 
 		# If bias is present, concatenate vector of 1's
 		if self.bias:
 			o1 = np.concatenate((o1, \
 					np.ones((1, o1.shape[1]))), axis=0)
 
-		l2 = np.dot(self.w2, o1)
-		o2 = tanh(l2)
+		o2 = tanh(np.dot(self.w2, o1))
 
-		l3 = np.dot(self.w3, o2)
-		o3 = tanh(l3)
+		# If bias is present, concatenate vector of 1's
+		if self.bias:
+			o2 = np.concatenate((o2, \
+					np.ones((1, o2.shape[1]))), axis=0)
+
+		o3 = tanh(np.dot(self.w3, o2))
 		return o3
