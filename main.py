@@ -105,18 +105,18 @@ def train_network(dataset,
 			end = min(k+batch_size, len(train_idx))
 			output = model.forward(dataset[k:end, :INPUT])
 			model.backwards(dataset[k:end, :INPUT], \
-					dataset[k:end, INPUT])
+					dataset[k:end, INPUT:(INPUT+1)])
 
 		loss = 0
 		np.random.shuffle(train_idx)
 
 		for _, val in enumerate(test_idx):
 			output = model.eval(dataset[val, :INPUT])
-			loss += np.square(dataset[val, INPUT] - output)*0.5
+			loss += (((dataset[val, INPUT] - output[0][0]))**2)*0.5
 		loss /= len(train_idx)
-		loss_history.append(loss[0])
+		loss_history.append(loss)
 
-		print("Epoch: ", i," Validation Loss: ", loss[0])
+		print("Epoch: ", i," Validation Loss: ", loss)
 
 	np.savetxt('loss_history.csv', loss_history, delimiter=',')
 	return loss_history
