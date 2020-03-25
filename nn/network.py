@@ -90,7 +90,8 @@ class ff_network():
 		x = np.array(x, ndmin=2).T
 
 		# Forward pass first layer
-		self.o1 = tanh(np.dot(self.w1, x))
+		self.v1 = np.dot(self.w1, x)
+		self.o1 = tanh(self.v1)
 
 		# If bias is present, concatenate vector of 1's
 		if self.bias:
@@ -98,7 +99,8 @@ class ff_network():
 					np.ones((1, self.o1.shape[1]))),axis=0)
 
 		# Forward pass second layer
-		self.o2 = tanh(np.dot(self.w2, self.o1))
+		self.v2 = np.dot(self.w2, self.o1)
+		self.o2 = tanh(self.v2)
 
 		# If bias is present, concatenate vector of 1's
 		if self.bias:
@@ -106,7 +108,8 @@ class ff_network():
 					np.ones((1, self.o2.shape[1]))),axis=0)
 
 		# Forward pass third layer
-		self.o3 = tanh(np.dot(self.w3, self.o2))
+		self.v3 = np.dot(self.w3, self.o2)
+		self.o3 = tanh(self.v3)
 		return self.o3
 
 	def backwards(self, inp, expected):
@@ -124,7 +127,8 @@ class ff_network():
 		inp = np.array(inp, ndmin=2).T
 
 		# Compute error at last layer
-		self.o_error = expected - self.o3
+		self.o_error = np.mean(expected.T - self.o3, axis=1, \
+					keepdims=True)
 
 		# Note: Refer backpropogation slides for full details on
 		#       backprop equation.
@@ -132,15 +136,15 @@ class ff_network():
 
 		# Pass output loss through derivative of activation function.
 		# In this case, Tanh.
-		self.l3_error = self.o_error*d_tanh(self.o3)
+		self.l3_error = self.o_error*d_tanh(np.mean(self.v3, axis=1, keepdims=True))
 
 		# Compute delta of weights in layer. Scale delta by a factor of
 		# learning rate.
-		delta_w3 = self.lr*np.dot(self.l3_error, self.o2.T)
+		delta_w3 = self.lr*np.dot(self.l3_error, np.mean(self.o2, axis=1, keepdims=True).T)
 
 		# Add delta and momentum factor for improved stability to
 		# weight matrix.
-		self.w3 += delta_w3 + self.momentum * self.w3_delta
+		self.w3 += (1 - self.momentum)*delta_w3 + self.momentum * self.w3_delta
 
 		# Update momentum factor
 		self.w3_delta = delta_w3
@@ -150,27 +154,23 @@ class ff_network():
 		#       loops to optimize and streamline backprop computation.
 
 		# Backprop for weight matrix 2
-		self.l2_error = np.dot(self.w3.T, self.o_error)*d_tanh(self.o2)
-		x = np.dot(self.l2_error, self.o1.T)
 		if self.bias:
-			# If bias is present, last row cut off
-			x = x[:-1, :]
-		delta_w2 = self.lr*x
-		self.w2 += delta_w2 + self.momentum * self.w2_delta
+			self.l2_error = np.dot(self.w3[:,:-1].T, self.l3_error)*d_tanh(np.mean(self.v2,axis = 1, keepdims = True))
+		else :
+			self.l2_error = np.dot(self.w3.T, self.l3_error)*d_tanh(np.mean(self.v2,axis = 1, keepdims = True))
+		delta_w2 = self.lr*np.dot(self.l2_error, np.mean(self.o1, axis = 1, keepdims= True).T)
+
+		self.w2 += (1 - self.momentum)*delta_w2 + self.momentum * self.w2_delta
 		self.w2_delta = delta_w2
 
 		# Backprop for weight matrix 1
 		if self.bias:
-			# If bias is present, last row cut off for errors
-			l1_error = np.dot(self.w2.T,self.l2_error[:-1,:])
-			l1_error *= d_tanh(self.o1)
-			x = np.dot(l1_error[:-1, :], inp.T)
-		else:
-			l1_error = np.dot(self.w2.T,self.l2_error)
-			l1_error *= d_tanh(self.o1)
-			x = np.dot(l1_error, inp.T)
-		delta_w1 = self.lr*x
-		self.w1 += delta_w1 + self.momentum * self.w1_delta
+			self.l1_error = np.dot(self.w2[:,:-1].T, self.l2_error)*d_tanh(np.mean(self.v1,axis = 1, keepdims = True))
+		else :
+			self.l1_error = np.dot(self.w2.T, self.l2_error)*d_tanh(np.mean(self.v1,axis = 1, keepdims = True))
+		delta_w1 = self.lr*np.dot(self.l1_error, np.mean(inp, axis = 1, keepdims= True).T)
+
+		self.w1 += (1 - self.momentum)*delta_w1 + self.momentum * self.w1_delta
 		self.w1_delta = delta_w1
 
 	def eval(self, x):
