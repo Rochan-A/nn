@@ -157,25 +157,26 @@ def scores(data, model, test_idx, input_size):
 	np.savetxt('output_vals.csv', save_this, delimiter=',')
 	print("MAPE: ", (mape*100)/cnt)
 
-
 if __name__ == '__main__':
 	# Neural Network Parameters
 	INPUT = 13
-	HIDDEN = 50
 	OUTPUT = 1
 
 	# Training Parameters
 	EPOCH = 400
-	BATCH_SIZE = 32
+	BATCH_SIZE = 1
 
 	# Read dataset and normalize
 	dataset, rng, mins, maxs, data = \
 		training_data('../dataset/mpp_dataset_v1_13-inputs.txt')
 
 	# Initialize Neural Network
-	nn = ff_network(INPUT, HIDDEN, OUTPUT,
-				bias=True,
-				batch_size=BATCH_SIZE)
+	nn = ff_network(bias=True, batch_size=BATCH_SIZE)
+
+	# Add layers
+	nn.add_linear(INPUT, 50)
+	nn.add_linear(50, 50)
+	nn.add_linear(50, OUTPUT)
 
 	# Generate test and train indices arrays
 	train_idx, test_idx = split(dataset)
