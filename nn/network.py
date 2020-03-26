@@ -144,7 +144,7 @@ class ff_network():
 
 		# Note: The above steps are repeated for the two other weight
 		# matrices.
-		for layer_idx in range(self.num_layers-2, 0, -1):
+		for layer_idx in range(self.num_layers-2, -1, -1):
 			if self.bias:
 				self.llayer_error = np.dot(self.weights[layer_idx+1][:,:-1].T, self.llayer_error) * \
 							d_tanh(np.mean(self.v[layer_idx], axis = 1, keepdims = True))
