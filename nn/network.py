@@ -144,25 +144,25 @@ class ff_network():
 
 		# Note: The above steps are repeated for the two other weight
 		# matrices.
-		for layer_idx in range(self.num_layers-1, 0, -1):
+		for layer_idx in range(self.num_layers-2, 0, -1):
 			if self.bias:
-				self.llayer_error = np.dot(self.weights[layer_idx][:,:-1].T, self.llayer_error) * \
-							d_tanh(np.mean(self.v[layer_idx-1], axis = 1, keepdims = True))
+				self.llayer_error = np.dot(self.weights[layer_idx+1][:,:-1].T, self.llayer_error) * \
+							d_tanh(np.mean(self.v[layer_idx], axis = 1, keepdims = True))
 			else :
-				self.llayer_error = np.dot(self.weights[layer_idx].T, self.llayer_error) * \
-							d_tanh(np.mean(self.v[layer_idx-1], axis = 1, keepdims = True))
+				self.llayer_error = np.dot(self.weights[layer_idx+1].T, self.llayer_error) * \
+							d_tanh(np.mean(self.v[layer_idx], axis = 1, keepdims = True))
 
 			if layer_idx == 0:
 				delta_llast_layer = self.lr * \
 						np.dot(self.llayer_error, np.mean(inp, axis = 1, keepdims = True).T)
 			else:
 				delta_llast_layer = self.lr * \
-						np.dot(self.llayer_error, np.mean(self.o[layer_idx-2], axis = 1, keepdims= True).T)
+						np.dot(self.llayer_error, np.mean(self.o[layer_idx-1], axis = 1, keepdims= True).T)
 
-			self.weights[layer_idx-1] += (1 - self.momentum) * delta_llast_layer + \
-							self.momentum * self.w_delta[layer_idx-1]
-			self.w_delta[layer_idx-1] = delta_llast_layer
-
+			self.weights[layer_idx] += (1 - self.momentum) * delta_llast_layer + \
+							self.momentum * self.w_delta[layer_idx]
+			self.w_delta[layer_idx] = delta_llast_layer
+			
 		del self.o
 		del self.v
 
