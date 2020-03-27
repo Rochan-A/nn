@@ -123,8 +123,8 @@ class ff_network():
 		# Pass output loss through derivative of activation function.
 		# In this case, Tanh.
 		self.llayer_error = self.o_error * \
-				d_tanh(np.mean(self.v[self.num_layers-1],
-						axis=1, keepdims=True))
+				np.mean(d_tanh(self.v[self.num_layers-1]),
+						axis=1, keepdims=True)
 
 		# Compute delta of weights in layer. Scale delta by a factor of
 		# learning rate.
@@ -147,10 +147,10 @@ class ff_network():
 		for layer_idx in range(self.num_layers-2, -1, -1):
 			if self.bias:
 				self.llayer_error = np.dot(self.weights[layer_idx+1][:,:-1].T, self.llayer_error) * \
-							d_tanh(np.mean(self.v[layer_idx], axis = 1, keepdims = True))
+							np.mean(d_tanh(self.v[layer_idx]), axis = 1, keepdims = True)
 			else :
 				self.llayer_error = np.dot(self.weights[layer_idx+1].T, self.llayer_error) * \
-							d_tanh(np.mean(self.v[layer_idx], axis = 1, keepdims = True))
+							np.mean(d_tanh(self.v[layer_idx]), axis = 1, keepdims = True)
 
 			if layer_idx == 0:
 				delta_llast_layer = self.lr * \
