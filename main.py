@@ -79,14 +79,14 @@ def train_network(X_train,
                     y_train[k:end,:])
 
         loss = 0
-        for _, val in enumerate(X_test):
+        for j, val in enumerate(X_test):
             val = np.reshape(val,(1,len(val)))
             output = model.predict(val)
             try:
                 output = output[0][0].item()
             except:
                 a = 0
-            loss += (((y_test[i][0] - output))**2)*0.5
+            loss += (((y_test[j][0] - output))**2)*0.5
         loss /= len(y_test)
         loss_history.append(loss)
 
