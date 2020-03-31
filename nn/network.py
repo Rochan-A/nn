@@ -1,193 +1,366 @@
 from .utils import tanh, d_tanh
 
 import numpy as np
-from scipy.stats import truncnorm
+import keras
 
-def truncated_normal(mean=0, sd=1, low=0, upp=10):
-	"""Compute Truncated Norm value for weight matrix initialization"""
-	return truncnorm(
-		(low - mean) / sd, (upp - mean) / sd, loc=mean, scale=sd)
+from keras.models import Sequential
+from keras import regularizers
+from keras.layers import Dense, Dropout
+from keras.initializers import lecun_normal, Constant
 
-class ff_network():
-	"""Fully Connected Neural Network"""
-	def __init__(self,
-			learning_rate=1e-3,
-			momentum=0.9,
-			bias=None,
-			batch_size=1
-			):
-		"""Intialize weights
+class ff_network(Sequential):
+    """Fully Connected Neural Network"""
+    def __init__(self,
+            learning_rate=1e-3,
+            momentum=0.9,
+            bias=None,
+            batch_size=1
+            ):
+        """Intialize weights
 
-		Args:
-			learning_rate (Default=1e-5): Learning rate
-			momentum (Default=0.9): Momentum factor
-			bias (Defualt=None): Use bais value or not
-			batch_size (Default=1): Batch Size
-		"""
-		super().__init__()
+        Args:
+            learning_rate (Default=1e-5): Learning rate
+            momentum (Default=0.9): Momentum factor
+            bias (Defualt=None): Use bais value or not
+            batch_size (Default=1): Batch Size
+        """
+        super().__init__()
 
-		# Parameters
-		self.lr = learning_rate
-		self.momentum = momentum
-		self.bias = bias
-		self.batch_size = batch_size
-		self.num_layers = 0
+        # Parameters
+        self.lr = learning_rate
+        self.momentum = momentum
+        self.bias = bias
+        self.batch_size = batch_size
+        self.num_layers = 0
 
-		# Weights
-		self.weights = []
-		# Auxilary matrix for storing momentum calculation
-		self.w_delta = []
+        # Auxilary matrix for storing momentum calculation
+        self.w_delta = []
 
-	def add_linear(self,
-			input_dim,
-			output_dim
-			):
-		"""Add layer to the network
+    def add_linear(self,
+            input_dim,
+            output_dim,
+            INPUT = False
+            ):
+        """Add layer to the network
 
-		Args:
-			input_dim: Input dimension
-			output_dim: Output dimension
-		"""
-		bias_node = 1 if self.bias else 0
+        Args:
+            input_dim: Input dimension
+            output_dim: Output dimension
+        """
+        if INPUT == True:
+            self.add(Dense(output_dim = output_dim,
+                        use_bias = self.bias,
+                        kernel_initializer = lecun_normal(seed=None),
+                        bias_initializer = Constant(0.1),
+                        activation = 'tanh',
+                        input_dim = input_dim)
+                    )
+        else:
+            self.add(Dense(output_dim = output_dim,
+                        use_bias = self.bias,
+                        kernel_initializer = lecun_normal(seed=None),
+                        bias_initializer = Constant(0.1),
+                        activation = 'tanh')
+                    )
 
-		# Initialize weight matrices
-		rad = 1 / np.sqrt(input_dim + bias_node)
-		X = truncated_normal(mean=0, sd=1, low=-rad, upp=rad)
-		w = X.rvs((output_dim,
-			input_dim + bias_node))
+        # Weight delta for momentum calculation
+        w_d = np.zeros((output_dim, input_dim))
 
-		# Weight delta for momentum calculation
-		w_d = np.zeros((output_dim,
-			input_dim + bias_node))
+        self.w_delta.append(w_d)
+        self.num_layers += 1
 
-		self.weights.append(w)
-		self.w_delta.append(w_d)
-		self.num_layers += 1
+    def forward(self, x):
+        """Forward pass on Neural Network
 
-	def forward(self, x):
-		"""Forward pass on Neural Network
+        Args:
+            x: Input matrix
 
-		Args:
-			x: Input matrix
+        Returns:
+            output: Output matrix
+        """
+        x = np.array(x, ndmin=2).T
 
-		Returns:
-			output: Output matrix
-		"""
-		# If bias is present, concatenate vector of 1's
-		if self.bias:
-			x = np.concatenate((x,
-				np.ones((x.shape[0],1))), axis=1)
+        self.v = []
+        self.o = []
 
-		x = np.array(x, ndmin=2).T
+        # Iterate over every layer and forward pass, store v and o
+        # values.
+        for layer_idx in range(self.num_layers):
+            weight = self.layers[layer_idx].get_weights()[0]
+            v = np.dot(weight.T, x)
+            if self.bias:
+                bias = self.layers[layer_idx].get_weights()[1]
+                bias = np.expand_dims(bias, axis=1)
+                v += bias
+            x = tanh(v)
 
-		self.v = []
-		self.o = []
+            self.v.append(v)
+            self.o.append(x)
 
-		# Iterate over every layer and forward pass, store v and o
-		# values.
-		for layer_idx in range(self.num_layers):
-			v = np.dot(self.weights[layer_idx], x)
-			x = tanh(v)
+        return x
 
-			if self.bias and layer_idx != self.num_layers - 1:
-				x = np.concatenate((x,
-						np.ones((1, x.shape[1]))), axis=0)
+    def backwards(self, inp, expected):
+        """Forward pass on Neural Network
 
-			self.v.append(v)
-			self.o.append(x)
+        Args:
+            inp: Input matrix
+            expected: Expected value matrix
+        """
+        inp = np.array(inp, ndmin=2).T
 
-		return x
+        # Compute error at last layer
+        self.o_error = np.mean(expected.T - self.o[self.num_layers-1],
+                axis=1, keepdims=True)
 
-	def backwards(self, inp, expected):
-		"""Forward pass on Neural Network
+        # Note: Refer backpropogation slides for full details on
+        #       backprop equation.
+        # TODO: Backpropogation through multiple layers in a loop.
 
-		Args:
-			inp: Input matrix
-			expected: Expected value matrix
-		"""
-		# If bias is present, concatenate vector of 1's
-		if self.bias:
-			inp = np.concatenate((inp,
-					np.ones((inp.shape[0],1))), axis=1)
+        # Pass output loss through derivative of activation function.
+        # In this case, Tanh.
+        self.llayer_error = self.o_error * \
+                np.mean(d_tanh(self.v[self.num_layers-1]),
+                        axis=1, keepdims=True)
 
-		inp = np.array(inp, ndmin=2).T
+        # Compute delta of weights in layer. Scale delta by a factor of
+        # learning rate.
+        delta_llast_layer = self.lr * \
+                np.dot(self.llayer_error,
+                    np.mean(self.o[self.num_layers-2],
+                        axis=1, keepdims=True).T)
 
-		# Compute error at last layer
-		self.o_error = np.mean(expected.T - self.o[self.num_layers-1],
-				axis=1, keepdims=True)
+        # Add delta and momentum factor for improved stability to
+        # weight matrix.
+        weight = self.layers[self.num_layers-1].get_weights()[0]
+        if self.bias :
+            bias = self.layers[self.num_layers-1].get_weights()[1]
+            updatedWeights = [weight + \
+                (1 - self.momentum)*delta_llast_layer.T + \
+                self.momentum * self.w_delta[self.num_layers-1].T,
+                bias + self.lr * self.llayer_error.reshape(-1)]
+        else:
+            updatedWeights = [weight + \
+                (1 - self.momentum)*delta_llast_layer.T + \
+                self.momentum * self.w_delta[self.num_layers-1].T]
 
-		# Note: Refer backpropogation slides for full details on
-		#       backprop equation.
-		# TODO: Backpropogation through multiple layers in a loop.
+        self.layers[self.num_layers-1].set_weights(updatedWeights)
+        # Update momentum factor
+        self.w_delta[self.num_layers-1] = delta_llast_layer
 
-		# Pass output loss through derivative of activation function.
-		# In this case, Tanh.
-		self.llayer_error = self.o_error * \
-				np.mean(d_tanh(self.v[self.num_layers-1]),
-						axis=1, keepdims=True)
+        # Note: The above steps are repeated for the two other weight
+        # matrices.
+        for layer_idx in range(self.num_layers-2, -1, -1):
+            if self.bias:
+                self.llayer_error = np.dot(self.layers[layer_idx+1].get_weights()[0],
+                    self.llayer_error) * np.mean(d_tanh(self.v[layer_idx]), axis = 1, keepdims = True)
 
-		# Compute delta of weights in layer. Scale delta by a factor of
-		# learning rate.
-		delta_llast_layer = self.lr * \
-				np.dot(self.llayer_error,
-					np.mean(self.o[self.num_layers-2],
-						axis=1, keepdims=True).T)
+            if layer_idx == 0:
+                delta_llast_layer = self.lr * \
+                        np.dot(self.llayer_error, np.mean(inp, axis = 1, keepdims = True).T)
+            else:
+                delta_llast_layer = self.lr * \
+                        np.dot(self.llayer_error, np.mean(self.o[layer_idx-1], axis = 1, keepdims= True).T)
 
-		# Add delta and momentum factor for improved stability to
-		# weight matrix.
-		self.weights[self.num_layers-1] += \
-				(1 - self.momentum)*delta_llast_layer + \
-				self.momentum * self.w_delta[self.num_layers-1]
+            weight = self.layers[layer_idx].get_weights()[0]
+            if self.bias:
+                bias = self.layers[layer_idx].get_weights()[1]
+                updatedWeights = [weight + (1 - self.momentum) * delta_llast_layer.T + \
+                            self.momentum * self.w_delta[layer_idx].T,
+                        bias + self.lr * self.llayer_error.reshape(-1)]
+            else:
+                updatedWeights = [weight + (1 - self.momentum) * delta_llast_layer.T + \
+                            self.momentum * self.w_delta[layer_idx].T]
 
-		# Update momentum factor
-		self.w_delta[self.num_layers-1] = delta_llast_layer
+            self.layers[layer_idx].set_weights(updatedWeights)
+            self.w_delta[layer_idx] = delta_llast_layer
 
-		# Note: The above steps are repeated for the two other weight
-		# matrices.
-		for layer_idx in range(self.num_layers-2, -1, -1):
-			if self.bias:
-				self.llayer_error = np.dot(self.weights[layer_idx+1][:,:-1].T, self.llayer_error) * \
-							np.mean(d_tanh(self.v[layer_idx]), axis = 1, keepdims = True)
-			else :
-				self.llayer_error = np.dot(self.weights[layer_idx+1].T, self.llayer_error) * \
-							np.mean(d_tanh(self.v[layer_idx]), axis = 1, keepdims = True)
+        del self.o
+        del self.v
 
-			if layer_idx == 0:
-				delta_llast_layer = self.lr * \
-						np.dot(self.llayer_error, np.mean(inp, axis = 1, keepdims = True).T)
-			else:
-				delta_llast_layer = self.lr * \
-						np.dot(self.llayer_error, np.mean(self.o[layer_idx-1], axis = 1, keepdims= True).T)
+import torch
+from torch import nn
 
-			self.weights[layer_idx] += (1 - self.momentum) * delta_llast_layer + \
-							self.momentum * self.w_delta[layer_idx]
-			self.w_delta[layer_idx] = delta_llast_layer
-			
-		del self.o
-		del self.v
+def init_weights_agent(m):
+    if type(m) == nn.Linear:
+        nn.init.xavier_uniform_(m.weight)
+        try:
+            m.bias.data.fill_(0.1)
+        except:
+            a = 0
 
-	def eval(self, x):
-		"""Evaluate the Neural Network
+class pytorch_network(nn.Module):
+    """Fully Connected Neural Network"""
+    def __init__(self,
+            learning_rate=1e-3,
+            momentum=0.9,
+            bias=None,
+            batch_size=1
+            ):
+        """Intialize weights
 
-		Args:
-			x: Input value (ie. No batch sized matrix)
+        Args:
+            learning_rate (Default=1e-5): Learning rate
+            momentum (Default=0.9): Momentum factor
+            bias (Defualt=None): Use bais value or not
+            batch_size (Default=1): Batch Size
+        """
+        super().__init__()
 
-		Returns:
-			output: Output value
+        # Parameters
+        self.lr = learning_rate
+        self.momentum = momentum
+        self.bias = bias
+        self.batch_size = batch_size
+        self.num_layers = 0
 
-		"""
-		# If bias is present, concatenate vector of 1's
-		if self.bias:
-			x = np.concatenate((x, [1]))
+        self.layers = nn.Sequential()
 
-		x = np.array(x, ndmin=2).T
+        # Auxilary matrix for storing momentum calculation
+        self.w_delta = []
 
-		for layer_idx in range(self.num_layers):
-			v = np.dot(self.weights[layer_idx], x)
-			x = tanh(v)
+    def add_linear(self,
+            input_dim,
+            output_dim,
+            INPUT = False
+            ):
+        """Add layer to the network
 
-			if self.bias and layer_idx != self.num_layers - 1:
-				x = np.concatenate((x,
-					np.ones((1, x.shape[1]))), axis=0)
+        Args:
+            input_dim: Input dimension
+            output_dim: Output dimension
+        """
+        self.layers.add_module(str(self.num_layers),
+            nn.Linear(input_dim, output_dim, bias=self.bias))
+        self.layers.apply(init_weights_agent)
 
-		return x
+        # Weight delta for momentum calculation
+        w_d = np.zeros((output_dim, input_dim))
+
+        self.w_delta.append(w_d)
+        self.num_layers += 1
+
+    def forward(self, x):
+        """Forward pass on Neural Network
+
+        Args:
+            x: Input matrix
+
+        Returns:
+            output: Output matrix
+        """
+        x = torch.Tensor(x)
+
+        self.v = []
+        self.o = []
+
+        with torch.no_grad():
+            # Iterate over every layer and forward pass, store v and o
+            # values.
+            for layer_idx in range(self.num_layers):
+                weight = self.layers[layer_idx].weight
+                v = torch.matmul(x, weight.T)
+                if self.bias:
+                    bias = self.layers[layer_idx].bias
+                    v += bias.T
+                x = torch.tanh(v)
+
+                self.v.append(v)
+                self.o.append(x)
+
+        return x
+
+    def backwards(self, inp, expected):
+        """Forward pass on Neural Network
+
+        Args:
+            inp: Input matrix
+            expected: Expected value matrix
+        """
+        inp = torch.Tensor(inp)
+        expected = torch.Tensor(expected)
+
+        with torch.no_grad():
+
+            # Compute error at last layer
+            self.o_error = torch.mean(expected - self.o[self.num_layers-1],
+                    dim=0, keepdims=True)
+
+            # Note: Refer backpropogation slides for full details on
+            #       backprop equation.
+            # TODO: Backpropogation through multiple layers in a loop.
+
+            # Pass output loss through derivative of activation function.
+            # In this case, Tanh.
+            self.llayer_error = self.o_error * \
+                    torch.mean(d_tanh(self.v[self.num_layers-1]),
+                            dim=0, keepdims=True)
+
+            # Compute delta of weights in layer. Scale delta by a factor of
+            # learning rate.
+            delta_llast_layer = self.lr * \
+                    torch.matmul(self.llayer_error,
+                        torch.mean(self.o[self.num_layers-2],
+                            dim=0, keepdims=True))
+
+            # Add delta and momentum factor for improved stability to
+            # weight matrix.
+            self.layers[self.num_layers-1].weight += \
+                    (1 - self.momentum) * delta_llast_layer + \
+                    self.momentum * self.w_delta[self.num_layers-1]
+            if self.bias :
+                self.layers[self.num_layers-1].bias += \
+                        self.lr * self.llayer_error.reshape(-1)
+            # Update momentum factor
+            self.w_delta[self.num_layers-1] = delta_llast_layer
+
+            # Note: The above steps are repeated for the two other weight
+            # matrices.
+            for layer_idx in range(self.num_layers-2, -1, -1):
+                if self.bias:
+                    self.llayer_error = torch.matmul(self.llayer_error,
+                                        self.layers[layer_idx+1].weight) * \
+                                        torch.mean(d_tanh(self.v[layer_idx]),
+                                                        dim=0, keepdims=True)
+
+                if layer_idx == 0:
+                    delta_llast_layer = self.lr * \
+                            torch.matmul(self.llayer_error.T,
+                                torch.mean(inp, dim=0, keepdims=True))
+                else:
+                    delta_llast_layer = self.lr * \
+                            torch.matmul(self.llayer_error.T,
+                                torch.mean(self.o[layer_idx-1], dim=0, keepdims=True))
+
+                self.layers[layer_idx].weight += (1 - self.momentum) * delta_llast_layer + \
+                                                    self.momentum * self.w_delta[layer_idx]
+                if self.bias:
+                    self.layers[layer_idx].bias += self.lr * self.llayer_error.reshape(-1)
+
+                self.w_delta[layer_idx] = delta_llast_layer
+
+            del self.o
+            del self.v
+
+    def predict(self, x):
+        """Forward pass on Neural Network for prediction
+
+        Args:
+            x: Input matrix
+
+        Returns:
+            output: Output matrix
+        """
+        x = torch.Tensor(x)
+
+        with torch.no_grad():
+            # Iterate over every layer and forward pass, store v and o
+            # values.
+            for layer_idx in range(self.num_layers):
+                weight = self.layers[layer_idx].weight
+                v = torch.matmul(x, weight.T)
+                if self.bias:
+                    bias = self.layers[layer_idx].bias
+                    v += bias.T
+                x = torch.tanh(v)
+
+        return x
