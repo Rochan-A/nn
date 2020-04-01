@@ -234,7 +234,7 @@ class pytorch_network(nn.Module):
         self.layers.apply(init_weights_agent)
 
         # Weight delta for momentum calculation
-        w_d = np.zeros((output_dim, input_dim))
+        w_d = torch.zeros((output_dim, input_dim))
 
         self.w_delta.append(w_d)
         self.num_layers += 1
