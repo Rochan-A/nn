@@ -131,11 +131,11 @@ if __name__ == '__main__':
     OUTPUT = 1
 
     # Training Parameters
-    EPOCH = 10
-    BATCH_SIZE = 16
+    EPOCH = 400
+    BATCH_SIZE = 4
 
     # Initialize Neural Network
-    nn = pytorch_network(bias=False, batch_size=BATCH_SIZE)
+    nn = pytorch_network(bias=True, batch_size=BATCH_SIZE)
 
     # Add layers
     nn.add_linear(INPUT, 50, True)
