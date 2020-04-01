@@ -64,7 +64,7 @@ class ff_network(Sequential):
                     )
 
         # Weight delta for momentum calculation
-        w_d = np.zeros((output_dim, input_dim))
+        w_d = torch.zeros([output_dim, input_dim])
 
         self.w_delta.append(w_d)
         self.num_layers += 1
@@ -184,7 +184,7 @@ def init_weights_agent(m):
     if type(m) == nn.Linear:
         nn.init.xavier_uniform_(m.weight)
         try:
-            m.bias.data.fill_(0.1)
+            nn.init.xavier_uniform_(m.bias)
         except:
             a = 0
 
@@ -217,6 +217,7 @@ class pytorch_network(nn.Module):
 
         # Auxilary matrix for storing momentum calculation
         self.w_delta = []
+        self.b_delta = []
 
     def add_linear(self,
             input_dim,
@@ -234,9 +235,12 @@ class pytorch_network(nn.Module):
         self.layers.apply(init_weights_agent)
 
         # Weight delta for momentum calculation
-        w_d = torch.zeros((output_dim, input_dim))
+        w_d = torch.zeros([output_dim, input_dim])
+        if self.bias:
+            b_d = torch.zeros(self.layers[self.num_layers].bias.shape)
 
         self.w_delta.append(w_d)
+        self.b_delta.append(b_d)
         self.num_layers += 1
 
     def forward(self, x):
@@ -305,13 +309,15 @@ class pytorch_network(nn.Module):
             # Add delta and momentum factor for improved stability to
             # weight matrix.
             self.layers[self.num_layers-1].weight += \
-                    (1 - self.momentum) * delta_llast_layer + \
+                    1 * delta_llast_layer + \
                     self.momentum * self.w_delta[self.num_layers-1]
             if self.bias :
                 self.layers[self.num_layers-1].bias += \
-                        self.lr * self.llayer_error.reshape(-1)
+                        self.lr * self.llayer_error.reshape(-1) + \
+                        self.momentum * self.b_delta[self.num_layers-1]
             # Update momentum factor
             self.w_delta[self.num_layers-1] = delta_llast_layer
+            self.b_delta[self.num_layers-1] = self.lr * self.llayer_error.reshape(-1)
 
             # Note: The above steps are repeated for the two other weight
             # matrices.
@@ -331,12 +337,14 @@ class pytorch_network(nn.Module):
                             torch.matmul(self.llayer_error.T,
                                 torch.mean(self.o[layer_idx-1], dim=0, keepdims=True))
 
-                self.layers[layer_idx].weight += (1 - self.momentum) * delta_llast_layer + \
+                self.layers[layer_idx].weight += 1 * delta_llast_layer + \
                                                     self.momentum * self.w_delta[layer_idx]
                 if self.bias:
-                    self.layers[layer_idx].bias += self.lr * self.llayer_error.reshape(-1)
+                    self.layers[layer_idx].bias += self.lr * self.llayer_error.reshape(-1) + \
+                                self.momentum * self.b_delta[layer_idx]
 
                 self.w_delta[layer_idx] = delta_llast_layer
+                self.b_delta[layer_idx] = self.lr * self.llayer_error.reshape(-1)
 
             del self.o
             del self.v
