@@ -35,6 +35,7 @@ class ff_network(Sequential):
 
         # Auxilary matrix for storing momentum calculation
         self.w_delta = []
+        self.b_delta = []
 
     def add_linear(self,
             input_dim,
@@ -64,9 +65,12 @@ class ff_network(Sequential):
                     )
 
         # Weight delta for momentum calculation
-        w_d = torch.zeros([output_dim, input_dim])
+        w_d = np.zeros([output_dim, input_dim])
+        if self.bias:
+            b_d = np.zeros(self.layers[self.num_layers].get_weights()[1].shape)
 
         self.w_delta.append(w_d)
+        self.b_delta.append(b_d)
         self.num_layers += 1
 
     def forward(self, x):
@@ -134,10 +138,11 @@ class ff_network(Sequential):
         weight = self.layers[self.num_layers-1].get_weights()[0]
         if self.bias :
             bias = self.layers[self.num_layers-1].get_weights()[1]
+            bias_delta = self.lr * self.llayer_error.reshape(-1)
             updatedWeights = [weight + \
-                (1 - self.momentum)*delta_llast_layer.T + \
+                delta_llast_layer.T + \
                 self.momentum * self.w_delta[self.num_layers-1].T,
-                bias + self.lr * self.llayer_error.reshape(-1)]
+                bias + bias_delta + self.momentum*self.b_delta[self.num_layers-1]]
         else:
             updatedWeights = [weight + \
                 (1 - self.momentum)*delta_llast_layer.T + \
@@ -146,6 +151,7 @@ class ff_network(Sequential):
         self.layers[self.num_layers-1].set_weights(updatedWeights)
         # Update momentum factor
         self.w_delta[self.num_layers-1] = delta_llast_layer
+        self.b_delta[self.num_layers-1] = bias_delta
 
         # Note: The above steps are repeated for the two other weight
         # matrices.
@@ -164,15 +170,17 @@ class ff_network(Sequential):
             weight = self.layers[layer_idx].get_weights()[0]
             if self.bias:
                 bias = self.layers[layer_idx].get_weights()[1]
-                updatedWeights = [weight + (1 - self.momentum) * delta_llast_layer.T + \
+                bias_delta = self.lr * self.llayer_error.reshape(-1)
+                updatedWeights = [weight + delta_llast_layer.T + \
                             self.momentum * self.w_delta[layer_idx].T,
-                        bias + self.lr * self.llayer_error.reshape(-1)]
+                        bias + bias_delta + self.momentum*self.b_delta[layer_idx]]
             else:
                 updatedWeights = [weight + (1 - self.momentum) * delta_llast_layer.T + \
                             self.momentum * self.w_delta[layer_idx].T]
 
             self.layers[layer_idx].set_weights(updatedWeights)
             self.w_delta[layer_idx] = delta_llast_layer
+            self.b_delta[layer_idx] = bias_delta
 
         del self.o
         del self.v
