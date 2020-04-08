@@ -10,6 +10,7 @@ from sklearn.metrics import r2_score
 
 plt.style.use('seaborn-whitegrid')
 
+
 def dataset_norm_scale(path):
     """Read data forom excel file (.xls)
 
@@ -27,14 +28,14 @@ def dataset_norm_scale(path):
     # Read dataset and normalize
     dataset = pd.read_excel(path)
 
-    X = dataset.iloc[0:8300,0:13].values
+    X = dataset.iloc[0:8300, 0:13].values
     y = dataset.iloc[0:8300:, 13:14].values
     X = X.astype('float32')
     y = y.astype('float32')
 
     # Splitting the dataset into the Training set and Test set
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2,
-                                                            random_state = 0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,
+                                                        random_state=0)
 
     # Feature Scaling
     sc = StandardScaler()
@@ -47,14 +48,15 @@ def dataset_norm_scale(path):
 
     return X_train, y_train, X_test, y_test, sc_y
 
+
 def train_network(X_train,
-        y_train,
-        X_test,
-        y_test,
-        model,
-        epoch=100,
-        batch_size=1
-        ):
+                  y_train,
+                  X_test,
+                  y_test,
+                  model,
+                  epoch=100,
+                  batch_size=1
+                  ):
     """Training loop
 
     Args:
@@ -73,36 +75,37 @@ def train_network(X_train,
     loss_history = []
     for i in range(EPOCH):
         for k in range(0, len(X_train), batch_size):
-            end = min(k+batch_size, len(X_train))
-            output = model.forward(X_train[k:end,:])
-            model.backwards(X_train[k:end,:], \
-                    y_train[k:end,:])
+            end = min(k + batch_size, len(X_train))
+            output = model.forward_de(X_train[k:end, :])
+            model.backwards_de(X_train[k:end, :],
+                               y_train[k:end, :])
 
         loss = 0
         for j, val in enumerate(X_test):
-            val = np.reshape(val,(1,len(val)))
+            val = np.reshape(val, (1, len(val)))
             output = model.predict(val)
             try:
                 output = output[0][0].item()
-            except:
+            except BaseException:
                 a = 0
-            loss += (((y_test[j][0] - output))**2)*0.5
+            loss += (((y_test[j][0] - output))**2) * 0.5
         loss /= len(y_test)
         loss_history.append(loss)
 
-        print("Epoch: ", i," Validation Loss: ", loss)
+        print("Epoch: ", i, " Validation Loss: ", loss)
 
     np.savetxt('loss_history.csv', loss_history, delimiter=',')
 
     return loss_history
 
-def scores(model, X_test,y_test, sc_y, path):
+
+def scores(model, X_test, y_test, sc_y, path):
     """Compute MAPE and RSQ.
 
     Args:
         model: Neural Network object
         X_test: features for testing
-        y_test: labels fro testing
+        y_test: labels for testing
         sc_y: labels scaler object
         path: location to save predicted labels
     """
@@ -112,30 +115,37 @@ def scores(model, X_test,y_test, sc_y, path):
     y_pred = sc_y.inverse_transform(y_pred)
     y_test = sc_y.inverse_transform(y_test)
 
-    Data = np.concatenate((y_test,y_pred), axis = 1 )
-    df = pd.DataFrame(Data, columns = ['Real Values', 'Predicted Values'])
-    df.to_excel(path, index = False, header=True)
+    Data = np.concatenate((y_test, y_pred), axis=1)
+    df = pd.DataFrame(Data, columns=['Real Values', 'Predicted Values'])
+    df.to_excel(path, index=False, header=True)
 
     mape = 0
     cnt = 0
-    for i,_ in enumerate(y_test):
-        mape += abs(y_pred[i] - y_test[i])/abs(y_test[i])
+    for i, _ in enumerate(y_test):
+        mape += abs(y_pred[i] - y_test[i]) / abs(y_test[i])
         cnt += 1
 
     print("RSQ: ", r2_score(y_test, y_pred))
-    print("MAPE: ", (mape*100)/cnt)
+    print("MAPE: ", (mape * 100) / cnt)
+
 
 if __name__ == '__main__':
     # Neural Network Parameters
     INPUT = 13
     OUTPUT = 1
 
+    # Differential Evolution Parameters
+    POP_SIZE = 3
+    K_VAL = 0.8
+    CROSS_PROB = 0.75
+
     # Training Parameters
-    EPOCH = 400
-    BATCH_SIZE = 4
+    EPOCH = 30
+    BATCH_SIZE = 8300
 
     # Initialize Neural Network
-    nn = pytorch_network(bias=True, batch_size=BATCH_SIZE)
+    nn = pytorch_network(bias=True, batch_size=BATCH_SIZE, pop_size=POP_SIZE,
+                         k_val=K_VAL, cross_prob=CROSS_PROB)
 
     # Add layers
     nn.add_linear(INPUT, 50, True)
@@ -146,13 +156,17 @@ if __name__ == '__main__':
         dataset_norm_scale('../dataset/mpp_dataset_v1_13-inputs.xls')
 
     # Train
-    loss_history = train_network(X_train,y_train,X_test,y_test, model = nn,
-                                        epoch=EPOCH, batch_size=BATCH_SIZE)
+    loss_history = train_network(X_train, y_train, X_test, y_test, model=nn,
+                                 epoch=EPOCH, batch_size=BATCH_SIZE)
+
+    # Add candidate losses to plot
+    for idx in range(POP_SIZE):
+        plt.plot(
+            np.arange(nn.candidate_loss[idx].shape[0]), nn.candidate_loss[idx])
 
     # Compute MAPE and RSQ value
     save_path = r'C:\Users\Zakaria\Desktop\Inbox\export_dataframe_2.xlsx'
     scores(nn, X_test, y_test, sc_y, save_path)
 
     # Plot loss history
-    plt.scatter(np.arange(len(loss_history)), loss_history, alpha=0.5)
     plt.show()
