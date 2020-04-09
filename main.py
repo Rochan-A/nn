@@ -1,5 +1,5 @@
-from nn.network import *
-
+from nn.network import pytorch_network,_objective
+import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -54,8 +54,7 @@ def train_network(X_train,
                   X_test,
                   y_test,
                   model,
-                  epoch=100,
-                  batch_size=1
+                  epoch=100
                   ):
     """Training loop
 
@@ -66,7 +65,6 @@ def train_network(X_train,
         y_test : labels for testing
         model: Neural Network object
         epoch (Default=100): Number of epochs
-        batch_size (Default=1): Batch Size
 
     Returns:
         loss_history: Array of training loss
@@ -74,22 +72,12 @@ def train_network(X_train,
 
     loss_history = []
     for i in range(EPOCH):
-        for k in range(0, len(X_train), batch_size):
-            end = min(k + batch_size, len(X_train))
-            output = model.forward_de(X_train[k:end, :])
-            model.backwards_de(X_train[k:end, :],
-                               y_train[k:end, :])
 
-        loss = 0
-        for j, val in enumerate(X_test):
-            val = np.reshape(val, (1, len(val)))
-            output = model.predict(val)
-            try:
-                output = output[0][0].item()
-            except BaseException:
-                a = 0
-            loss += (((y_test[j][0] - output))**2) * 0.5
-        loss /= len(y_test)
+            
+        model.backwards_de(X_train,
+                               y_train)
+
+        loss = torch.mean(_objective(torch.tensor(model.predict(X_test)), torch.tensor(y_test))).item()
         loss_history.append(loss)
 
         print("Epoch: ", i, " Validation Loss: ", loss)
@@ -169,4 +157,10 @@ if __name__ == '__main__':
     scores(nn, X_test, y_test, sc_y, save_path)
 
     # Plot loss history
+    plt.show()
+    
+    plt.plot(range(len(loss_history)),loss_history)
+    plt.title('The Validation loss of the best candidate in each gen')
+    plt.xlabel('Generation')
+    plt.ylabel('Validation Loss')
     plt.show()
