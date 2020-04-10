@@ -169,9 +169,8 @@ class pytorch_network(nn.Module):
         # Crossover
         probs = torch.randn(mutant.shape)
         return torch.where(
-            probs >= self.cross_prob,
-            mutant,
-            self.population[idx])
+            probs >= self.cross_prob,self.population[idx],
+            mutant)
 
 
     def backwards_de(self, input_, expected):
