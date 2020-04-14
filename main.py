@@ -1,4 +1,5 @@
-from nn.network import pytorch_network,_objective
+from nn.de import de_evo
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -129,38 +130,15 @@ if __name__ == '__main__':
 
     # Training Parameters
     EPOCH = 30
-    BATCH_SIZE = 8300
-
-    # Initialize Neural Network
-    nn = pytorch_network(bias=True, batch_size=BATCH_SIZE, pop_size=POP_SIZE,
-                         k_val=K_VAL, cross_prob=CROSS_PROB)
-
-    # Add layers
-    nn.add_linear(INPUT, 50, True)
-    nn.add_linear(50, OUTPUT)
 
     # Read data and transform
     X_train, y_train, X_test, y_test, sc_y = \
         dataset_norm_scale('../dataset/mpp_dataset_v1_13-inputs.xls')
 
-    # Train
-    loss_history = train_network(X_train, y_train, X_test, y_test, model=nn,
-                                 epoch=EPOCH, batch_size=BATCH_SIZE)
+    # Define the DE environment
+    de = de_evo(pop_size=POP_SIZE, k=K_VAL, cross_prob=CROSS_PROB, bias=True)
 
-    # Add candidate losses to plot
-    for idx in range(POP_SIZE):
-        plt.plot(
-            np.arange(nn.candidate_loss[idx].shape[0]), nn.candidate_loss[idx])
+    # Add layers
+    de.add_linear(INPUT, 50, True)
+    de.add_linear(50, OUTPUT)
 
-    # Compute MAPE and RSQ value
-    save_path = r'C:\Users\Zakaria\Desktop\Inbox\export_dataframe_2.xlsx'
-    scores(nn, X_test, y_test, sc_y, save_path)
-
-    # Plot loss history
-    plt.show()
-    
-    plt.plot(range(len(loss_history)),loss_history)
-    plt.title('The Validation loss of the best candidate in each gen')
-    plt.xlabel('Generation')
-    plt.ylabel('Validation Loss')
-    plt.show()
