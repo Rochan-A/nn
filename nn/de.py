@@ -2,6 +2,7 @@ from nn.network import pytorch_network
 
 import torch
 from torch import nn
+import torch.multiprocessing as mp
 
 @torch.jit.script
 def _objective(output, expected):
@@ -60,7 +61,11 @@ class de_evo():
             for gpu_idx in range(self.d_count):
                 with torch.cuda.device(gpu_idx):
                     for idx in range(gpu_idx, self.pop_size, self.d_count):
-                        self.candidateVec.append(pytorch_network(bias=self.bias).to(device=self.device))
+                        device_idx = 'cuda:' + str(gpu_idx)
+                        self.candidateVec.append(pytorch_network(bias=self.bias,
+                                                                 device=device_idx,
+                                                                 idx=idx
+                                                                 ).to(device=device_idx))
         else:
             self.candidateVec = [
                 pytorch_network(bias=self.bias).to(device=self.device)
@@ -83,6 +88,45 @@ class de_evo():
 
         for i in range(self.pop_size):
             self.candidateVec[i].add_linear(input_dim, output_dim, inp_layer)
+
+    def forward(self, x):
+        """Forward pass on candidates in parallel
+
+        Args:
+            x: Input tensor
+        """
+
+        # Convert input to tensor, broadcast to all available GPU's
+        x = torch.tensor(x)
+        x = torch.cuda.comm.broadcast(x, [i for i in range(self.d_count)])
+
+        # Use torch.multiprocessing support for CUDA, Queue to pass outputs
+        jobs = []
+        ctx = mp.get_context('spawn')
+        queue = ctx.Queue()
+
+        # Start a process for each candidate
+        for idx in range(self.pop_size):
+            p = ctx.Process(target=self.candidateVec[idx].forward, args=(x, queue))
+            jobs.append(p)
+            p.start()
+
+        # Read outputs from Queue
+        res = []
+        for idx in range(self.pop_size):
+            res.append(queue.get())
+        res = res.sort(key = lambda x: x[0])
+
+        # Concatenate into single tensor
+        out_tensor = res[0][1]
+        for idx in range(self.pop_size - 1):
+            out_tensor = torch.cat([out_tensor, res[idx][0]], dim=0)
+
+        # Wait for processes to end
+        for proc in jobs:
+            proc.join()
+
+        print(out_tensor.numpy().shape)
 
     def _mutant(self, idx, F):
         """Generate Mutant vector and perform Crossover

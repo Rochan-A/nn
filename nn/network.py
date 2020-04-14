@@ -25,17 +25,23 @@ class pytorch_network(nn.Module):
 
     def __init__(self,
                 bias=None,
+                device='cpu',
+                idx=0
                 ):
         """Intialize weights
 
         Args:
             bias (Defualt=None): Use bais value or not
+            device (Default='cpu'): Device to load tensors
+            idx (Default=0): Network index
         """
         super().__init__()
 
         # Parameters
         self.bias = bias
         self.num_layers = 0
+        self.device = device
+        self.idx = idx
 
         # Network layers
         self.layers = nn.Sequential()
@@ -88,25 +94,22 @@ class pytorch_network(nn.Module):
                 self.layers[layer_idx].bias = torch.nn.Parameter(bias)
 
 
-    def predict(self, x):
+    def forward(self, x, queue):
         """Forward pass on Neural Network for prediction
 
         Args:
             x: Input matrix
-
-        Returns:
-            output: Output matrix
+            queue: MP Queue
         """
-        x = torch.tensor(x)
-
+        x = x[0]
         with torch.no_grad():
             # Iterate over every layer and forward pass
             for layer_idx in range(self.num_layers):
-                weight = self.layers[layer_idx].weight
+                weight = self.layers[layer_idx].weight.to(device=self.device)
                 v = torch.matmul(x, weight.T)
                 if self.bias:
-                    bias = self.layers[layer_idx].bias
+                    bias = self.layers[layer_idx].bias.to(device=self.device)
                     v += bias.T
                 x = torch.tanh(v)
 
-        return x
+        queue.put([self.idx, x])
