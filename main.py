@@ -142,4 +142,4 @@ if __name__ == '__main__':
     de.add_linear(INPUT, 50, True)
     de.add_linear(50, OUTPUT)
 
-    de.forward(X_train)
+    de.predict(X_test, y_test)

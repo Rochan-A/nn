@@ -15,7 +15,7 @@ def _objective(output, expected):
     Returns:
         MSE error as tensor
     """
-    return 0.5 * torch.pow(expected - output, 2)
+    return torch.mean(0.5 * torch.pow(expected - output, 2))
 
 class de_evo():
     """Differential Evolution Class. Fully GPU parallizable"""
@@ -89,16 +89,19 @@ class de_evo():
         for i in range(self.pop_size):
             self.candidateVec[i].add_linear(input_dim, output_dim, inp_layer)
 
-    def forward(self, x):
+    def predict(self, x, expected):
         """Forward pass on candidates in parallel
 
         Args:
             x: Input tensor
+            expected: Expected output
         """
 
-        # Convert input to tensor, broadcast to all available GPU's
+        # Convert to tensor, broadcast to all available GPU's
         x = torch.tensor(x)
         x = torch.cuda.comm.broadcast(x, [i for i in range(self.d_count)])
+
+        expected = torch.tensor(expected).to(device=self.device)
 
         # Use torch.multiprocessing support for CUDA, Queue to pass outputs
         jobs = []
@@ -111,22 +114,24 @@ class de_evo():
             jobs.append(p)
             p.start()
 
-        # Read outputs from Queue
+        # Read outputs from Queue, sort wrt. candidate index
         res = []
         for idx in range(self.pop_size):
             res.append(queue.get())
-        res = res.sort(key = lambda x: x[0])
+        res.sort(key = lambda x: x[0])
 
-        # Concatenate into single tensor
-        out_tensor = res[0][1]
-        for idx in range(self.pop_size - 1):
-            out_tensor = torch.cat([out_tensor, res[idx][0]], dim=0)
+        # Compute loss, append to a single array
+        generation_loss = torch.zeros((self.pop_size, 1), device=self.device)
+        for idx in range(self.pop_size):
+            generation_loss[idx] = _objective(res[idx][1].to(device=self.device), expected)
+
+        self.candidate_loss = torch.cat([self.candidate_loss, generation_loss])
 
         # Wait for processes to end
         for proc in jobs:
             proc.join()
 
-        print(out_tensor.numpy().shape)
+        return generation_loss
 
     def _mutant(self, idx, F):
         """Generate Mutant vector and perform Crossover
