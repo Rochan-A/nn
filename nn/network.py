@@ -187,27 +187,28 @@ class pytorch_network(nn.Module):
             F = torch.FloatTensor(1).uniform_(-2, 2)
             gen_loss = torch.zeros((self.pop_size, 1))
 
+            vec_output = self.predict(input_)
+            loss = torch.mean(_objective(vec_output, expected))
             # Iterate over candidates
             for idx, _ in enumerate(self.population):
                 # Compute loss of candidate
-                vec_output = self.predict(input_)
-                loss = torch.mean(_objective(vec_output, expected))
+                #vec_output = self.predict(input_)
+                #loss = torch.mean(_objective(vec_output, expected))
 
                 # Perform DE, if the generated weights perform worse, recompute
                 # till it performs better than existing candidate
-                re = 0
-                while re == 0:
-                    trial = self._mutant(idx, F)
+                #re = 0
+                #while re == 0:
+                trial = self._mutant(idx, F)
 
-                    self._set_weights_to_layers(trial)
-                    vec_output = self.predict(input_)
-                    trial_loss = torch.mean(_objective(vec_output, expected))
-                    #print(trial_loss, loss)
+                self._set_weights_to_layers(trial)
+                vec_output = self.predict(input_)
+                trial_loss = torch.mean(_objective(vec_output, expected))
+                #print(trial_loss, loss)
 
-                    if trial_loss <= loss:
-                        self.population[idx] = trial
-                        gen_loss[idx][0] = trial_loss
-                        re = 1
+                if trial_loss <= loss:
+                    self.population[idx] = trial
+                    gen_loss[idx][0] = trial_loss
 
         # Set the model weight to the best performing candidate
         min_in_gen, min_weight_idx = torch.min(gen_loss, dim=0)

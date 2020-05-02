@@ -123,16 +123,16 @@ if __name__ == '__main__':
     OUTPUT = 1
 
     # Differential Evolution Parameters
-    POP_SIZE = 3
+    POP_SIZE = 5
     K_VAL = 0.8
     CROSS_PROB = 0.75
 
     # Training Parameters
-    EPOCH = 30
+    EPOCH = 400
     BATCH_SIZE = 8300
 
     # Initialize Neural Network
-    nn = pytorch_network(bias=True, batch_size=BATCH_SIZE, pop_size=POP_SIZE,
+    nn = pytorch_network(bias=True, pop_size=POP_SIZE,
                          k_val=K_VAL, cross_prob=CROSS_PROB)
 
     # Add layers
@@ -144,8 +144,8 @@ if __name__ == '__main__':
         dataset_norm_scale('../dataset/mpp_dataset_v1_13-inputs.xls')
 
     # Train
-    loss_history = train_network(X_train, y_train, X_test, y_test, model=nn,
-                                 epoch=EPOCH, batch_size=BATCH_SIZE)
+    loss_history = train_network(X_train, y_train, X_test, y_test, nn,
+                                 EPOCH)
 
     # Add candidate losses to plot
     for idx in range(POP_SIZE):
